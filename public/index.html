@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Shopping Cart with PayPal</title>
+    <!-- Link to our CSS file -->
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Simple Shopping Cart</h1>
+        
+        <!-- Product information -->
+        <div id="product" class="product">
+            <h2>Product: Amazing Widget</h2>
+            <p>Item Number: AW001</p>
+            <p>Price: $100.00</p>
+        </div>
+
+        <!-- Buyer information form -->
+        <h2>Buyer Information</h2>
+        <form id="buyer-info">
+            <!-- Form fields for buyer information -->
+            <div class="form-group">
+                <label for="firstName">First Name:</label>
+                <input type="text" id="firstName" name="firstName" value="Nick" required>
+            </div>
+            <div class="form-group">
+                <label for="lastName">Last Name:</label>
+                <input type="text" id="lastName" name="lastName" value="Anast" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" value="sb-zlmm534262133@personal.example.com" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">Phone:</label>
+                <input type="tel" id="phone" name="phone" value="123-555-7890" required>
+            </div>
+            <div class="form-group">
+                <label for="address1">Address Line 1:</label>
+                <input type="text" id="address1" name="address1" value="2211 N 1st Street" required>
+            </div>
+            <div class="form-group">
+                <label for="address2">Address Line 2:</label>
+                <input type="text" id="address2" name="address2" value="Apt 13">
+            </div>
+            <div class="form-group">
+                <label for="city">City:</label>
+                <input type="text" id="city" name="city" value="San Jose" required>
+            </div>
+            <div class="form-group">
+                <label for="state">State:</label>
+                <input type="text" id="state" name="state" value="CA" required>
+            </div>
+            <div class="form-group">
+                <label for="zip">ZIP Code:</label>
+                <input type="text" id="zip" name="zip" value="95131" required>
+            </div>
+            <div class="form-group">
+                <label for="country">Country:</label>
+                <input type="text" id="country" name="country" value="US" required>
+            </div>
+        </form>
+
+        <!-- Container for PayPal button -->
+        <div id="paypal-button-container"></div>
+        <!-- Container for error messages -->
+        <div id="error-message" style="color: red; margin-top: 10px;"></div>
+    </div>
+
+    <script>
+        let paypalClientId;
+
+        // Function to fetch PayPal Client ID from our server
+        async function fetchPayPalClientId() {
+            try {
+                const response = await fetch('/api/paypal-client-id');
+                const data = await response.json();
+                return data.clientId;
+            } catch (error) {
+                console.error('Error fetching PayPal Client ID:', error);
+                document.getElementById('error-message').textContent = 'Error fetching PayPal Client ID. Please try again later.';
+                throw error;
+            }
+        }
+
+        // Function to load PayPal SDK script
+        async function loadPayPalScript(clientId) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+                script.onload = resolve;
+                script.onerror = (error) => {
+                    console.error('Error loading PayPal script:', error);
+                    document.getElementById('error-message').textContent = 'Error loading PayPal script. Please check your internet connection and try again.';
+                    reject(error);
+                };
+                document.body.appendChild(script);
+            });
+        }
+
+        // Function to initialize PayPal button
+        async function initPayPalButton() {
+            try {
+                paypalClientId = await fetchPayPalClientId();
+                await loadPayPalScript(paypalClientId);
+
+                paypal.Buttons({
+                    // Function to create order when PayPal button is clicked
+                    createOrder: function(data, actions) {
+                        const buyerInfo = getBuyerInfo();
+                        return fetch('/api/create-paypal-order', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                cart: {
+                                    total: '100.00'
+                                },
+                                buyer: buyerInfo
+                            })
+                        }).then(function(res) {
+                            return res.json();
+                        }).then(function(orderData) {
+                            return orderData.id;
+                        }).catch(function(error) {
+                            console.error('Error creating PayPal order:', error);
+                            document.getElementById('error-message').textContent = 'Error creating PayPal order. Please try again.';
+                            throw error;
+                        });
+                    },
+                    // Function to handle approval of PayPal payment
+                    onApprove: function(data, actions) {
+                        return fetch('/api/capture-paypal-order', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                orderID: data.orderID
+                            })
+                        }).then(function(res) {
+                            return res.json();
+                        }).then(function(orderData) {
+                            const transactionId = orderData.purchase_units[0].payments.captures[0].id;
+                            window.location.href = `/thank-you.html?transactionId=${transactionId}`;
+                        }).catch(function(error) {
+                            console.error('Error capturing PayPal order:', error);
+                            document.getElementById('error-message').textContent = 'Error capturing PayPal order. Please try again.';
+                            throw error;
+                        });
+                    },
+                    // Function to handle PayPal errors
+                    onError: function(error) {
+                        console.error('PayPal error:', error);
+                        document.getElementById('error-message').textContent = 'An error occurred with PayPal. Please try again later.';
+                    }
+                }).render('#paypal-button-container');
+            } catch (error) {
+                console.error('Failed to initialize PayPal button:', error);
+                document.getElementById('error-message').textContent = 'Failed to initialize PayPal button. Please refresh the page and try again.';
+            }
+        }
+
+        // Function to get buyer information from the form
+        function getBuyerInfo() {
+            return {
+                firstName: document.getElementById('firstName').value,
+                lastName: document.getElementById('lastName').value,
+                email: document.getElementById('email').value,
+                phone: document.getElementById('phone').value,
+                address1: document.getElementById('address1').value,
+                address2: document.getElementById('address2').value,
+                city: document.getElementById('city').value,
+                state: document.getElementById('state').value,
+                zip: document.getElementById('zip').value,
+                country: document.getElementById('country').value
+            };
+        }
+
+        // Initialize PayPal button when the page loads
+        initPayPalButton();
+    </script>
+</body>
+</html>
+
+

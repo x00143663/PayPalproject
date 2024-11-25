@@ -1,0 +1,14 @@
+{
+  "name": "paypal-shopping-cart",
+  "version": "1.0.0",
+  "description": "A simple shopping cart with PayPal integration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "dotenv": "^16.0.3",
+    "node-fetch": "^2.6.9"
+  }
+}
